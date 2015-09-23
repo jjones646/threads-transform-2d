@@ -1,5 +1,5 @@
 // Threaded two-dimensional Discrete FFT transform
-// YOUR NAME HERE
+// Jonathan Jones
 // ECE8893 Project 2
 
 
@@ -15,6 +15,8 @@
 // 2d image being transformed.
 
 using namespace std;
+
+unsigned N;
 
 // Function to reverse bits in an unsigned integer
 // This assumes there is a global variable N that is the
@@ -53,7 +55,7 @@ void Transform1D(Complex* h, int N)
   // "N" is the size of the array (assume even power of 2)
 }
 
-void* Transform2DTHread(void* v)
+void* Transform2DThread(void* v)
 { // This is the thread startign point.  "v" is the thread number
   // Calculate 1d DFT for assigned rows
   // wait for all to complete
@@ -75,7 +77,7 @@ int main(int argc, char** argv)
 {
   string fn("Tower.txt"); // default file name
   if (argc > 1) fn = string(argv[1]);  // if name specified on cmd line
-  // MPI initialization here
+
   Transform2D(fn.c_str()); // Perform the transform.
 }  
   
