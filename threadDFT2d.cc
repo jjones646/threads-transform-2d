@@ -10,18 +10,16 @@
 #include "Complex.h"
 #include "InputImage.h"
 
+#include "myBarrier.h"
+
 using namespace std;
 
 // Global variables visible to all threads
-pthread_mutex_t   startCountMutex;
-pthread_mutex_t   exitMutex;
-pthread_mutex_t   elementCountMutex;
+pthread_mutex_t   startCountMutex,  exitMutex,    elementCountMutex;
 pthread_cond_t    exitCond;
-int               startCount;
-// Global variables for the image
 Complex*          ImageData;
-int               ImageWidth;
-int               ImageHeight;
+myBarrier*        barrier;
+int               startCount,       ImageWidth,   ImageHeight;
 unsigned          N;
 
 // Function to reverse bits in an unsigned integer
@@ -41,18 +39,6 @@ unsigned ReverseBits(unsigned v)
   return r;
 }
 
-// Call MyBarrier_Init once in main
-void MyBarrier_Init()// you will likely need some parameters)
-{
-
-}
-
-// Each thread calls MyBarrier after completing the row-wise DFT
-void MyBarrier() // Again likely need parameters
-{
-
-}
-
 void Transform1D(Complex* h, int N)
 {
   // Implement the efficient Danielson-Lanczos DFT here.
@@ -66,54 +52,58 @@ void* Transform2DThread(void* const arg)
   unsigned long threadID = (unsigned long)arg;
 
   // Calculate 1d DFT for assigned rows
-  // wait for all to complete
-  // Calculate 1d DFT for assigned columns
-  // Decrement active count and signal main if all complete
 
-  // -- mutex example --
-  // pthread_mutex_lock(&elementCountMutex);
-  // elementCount += localCount;
-  // pthread_mutex_unlock(&elementCountMutex);
+  // Wait for all to complete
+  barrier->enter(threadID);
+
+  // Calculate 1d DFT for assigned columns
 
   pthread_mutex_lock(&startCountMutex);
   startCount--;
+
   if (startCount == 0) {
     // Last to exit, notify main
-    pthread_mutex_unlock(&startCountMutex);
+    // pthread_mutex_unlock(&startCountMutex);
+
     pthread_mutex_lock(&exitMutex);
     pthread_cond_signal(&exitCond);
     pthread_mutex_unlock(&exitMutex);
   }
-  else {
-    pthread_mutex_unlock(&startCountMutex);
-  }
+  // else {
+  //   // release mutex
+  pthread_mutex_unlock(&startCountMutex);
+  // }
 
   return 0;
 }
 
-void Transform2D(const char* inputFN, int nThreads)
+void Transform2D(const char* filename, int nThreads)
 {
-  InputImage image(inputFN);  // Create the helper object for reading the image
+  // Create the helper object for reading the image
+  InputImage image(filename);
 
-  // Create the global pointer to the image array data
-// same image data array as well as width/height
+  // Store image data array as well as width/height
   ImageData   = image.GetImageData();
   ImageWidth  = image.GetWidth();
   ImageHeight = image.GetHeight();
 
-  // All mutex and condition variables must be "initialized"
+  // All mutex/condition variables must be "initialized"
   pthread_mutex_init(&exitMutex, 0);
   pthread_mutex_init(&startCountMutex, 0);
-  // Program ThreadedCount.cc (continued)
   pthread_mutex_init(&elementCountMutex, 0);
   pthread_cond_init(&exitCond, 0);
+
+  // Assign the barrier object pointer
+  barrier = new myBarrier(nThreads + 1);
+
   // Main holds the exit mutex until waiting for exitCond condition
   pthread_mutex_lock(&exitMutex);
 
-  // Create 16 threads
+  // Create the correct number of threads
   for (unsigned int i = 0; i < static_cast<unsigned int>(nThreads); ++i) {
     // Now create the thread
-    pthread_t pt; // pThread variable (output param from create)
+    pthread_t pt;
+
     // Third param is the thread starting function
     // Fourth param is passed to the thread starting function
     pthread_create(&pt, 0, Transform2DThread, (void*)i) ;
@@ -123,11 +113,9 @@ void Transform2D(const char* inputFN, int nThreads)
 
   // Main program now waits until all child threads completed
   pthread_cond_wait(&exitCond, &exitMutex);
-
   cout << "Done!" << endl;
 
   // Write the transformed data
-
 
 }
 

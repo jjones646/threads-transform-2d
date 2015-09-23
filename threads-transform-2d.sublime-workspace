@@ -4,6 +4,10 @@
 		"selected_items":
 		[
 			[
+				"start",
+				"startCount"
+			],
+			[
 				"motor",
 				"motorIDs"
 			],
@@ -98,10 +102,6 @@
 			[
 				"fi",
 				"filesize"
-			],
-			[
-				"start",
-				"startIndex"
 			],
 			[
 				"wait",
@@ -231,6 +231,17 @@
 	},
 	"buffers":
 	[
+		{
+			"contents": "// Threaded two-dimensional Discrete FFT transform\n// Jonathan Jones\n// ECE8893 Project 2\n\n#include <iostream>\n#include <string>\n#include <math.h>\n#include <cstdlib>\n\n#include \"Complex.h\"\n#include \"InputImage.h\"\n\nusing namespace std;\n\n// Global variables visible to all threads\npthread_mutex_t   startCountMutex;\npthread_mutex_t   exitMutex;\npthread_mutex_t   elementCountMutex;\npthread_cond_t    exitCond;\nint               startCount;\n// Global variables for the image\nComplex*          ImageData;\nint               ImageWidth;\nint               ImageHeight;\nunsigned          N;\n\n// Function to reverse bits in an unsigned integer\n// This assumes there is a global variable N that is the\n// number of points in the 1D transform.\nunsigned ReverseBits(unsigned v)\n{ //  Provided to students\n  unsigned n = N; // Size of array (which is even 2 power k value)\n  unsigned r = 0; // Return value\n\n  for (--n; n > 0; n >>= 1)\n  {\n    r <<= 1;        // Shift return value\n    r |= (v & 0x1); // Merge in next bit\n    v >>= 1;        // Shift reversal value\n  }\n  return r;\n}\n\n// Call MyBarrier_Init once in main\nvoid MyBarrier_Init()// you will likely need some parameters)\n{\n\n}\n\n// Each thread calls MyBarrier after completing the row-wise DFT\nvoid MyBarrier() // Again likely need parameters\n{\n\n}\n\nvoid Transform1D(Complex* h, int N)\n{\n  // Implement the efficient Danielson-Lanczos DFT here.\n  // \"h\" is an input/output parameter\n  // \"N\" is the size of the array (assume even power of 2)\n}\n\nvoid* Transform2DThread(void* const arg)\n{\n  // we are passed our thread number\n  unsigned long threadID = (unsigned long)arg;\n\n  // Calculate 1d DFT for assigned rows\n  // wait for all to complete\n  // Calculate 1d DFT for assigned columns\n  // Decrement active count and signal main if all complete\n\n  // -- mutex example --\n  // pthread_mutex_lock(&elementCountMutex);\n  // elementCount += localCount;\n  // pthread_mutex_unlock(&elementCountMutex);\n\n  pthread_mutex_lock(&startCountMutex);\n  startCount--;\n  if (startCount == 0) {\n    // Last to exit, notify main\n    pthread_mutex_unlock(&startCountMutex);\n    pthread_mutex_lock(&exitMutex);\n    pthread_cond_signal(&exitCond);\n    pthread_mutex_unlock(&exitMutex);\n  }\n  else {\n    pthread_mutex_unlock(&startCountMutex);\n  }\n\n  return 0;\n}\n\nvoid Transform2D(const char* inputFN, int nThreads)\n{\n  InputImage image(inputFN);  // Create the helper object for reading the image\n\n  // Create the global pointer to the image array data\n// same image data array as well as width/height\n  ImageData   = image.GetImageData();\n  ImageWidth  = image.GetWidth();\n  ImageHeight = image.GetHeight();\n\n  // All mutex and condition variables must be \"initialized\"\n  pthread_mutex_init(&exitMutex, 0);\n  pthread_mutex_init(&startCountMutex, 0);\n  // Program ThreadedCount.cc (continued)\n  pthread_mutex_init(&elementCountMutex, 0);\n  pthread_cond_init(&exitCond, 0);\n  // Main holds the exit mutex until waiting for exitCond condition\n  pthread_mutex_lock(&exitMutex);\n\n  // Create 16 threads\n  for (unsigned int i = 0; i < static_cast<unsigned int>(nThreads); ++i) {\n    // Now create the thread\n    pthread_t pt; // pThread variable (output param from create)\n    // Third param is the thread starting function\n    // Fourth param is passed to the thread starting function\n    pthread_create(&pt, 0, Transform2DThread, (void*)i) ;\n\n    cout << \"Thread \" << i << \" launched\" << endl;\n  }\n\n  // Main program now waits until all child threads completed\n  pthread_cond_wait(&exitCond, &exitMutex);\n\n  cout << \"Done!\" << endl;\n\n  // Write the transformed data\n\n}\n\nint main(int argc, char** argv)\n{\n  string fn(\"Tower.txt\"); // default file name\n  int nThreads = 16;  // default to 16 threads\n\n  if (argc > 1) fn = string(argv[1]);  // if name specified on cmd line\n  if (argc > 2) nThreads = atoi(argv[2]);   // number of threads to run is the 2nd cmd line opt\n\n  // die if the void cast will be a different size of memory\n  if (sizeof(void*) != sizeof(unsigned long)) {\n    exit(EXIT_FAILURE);\n  }\n\n  startCount = nThreads;\n\n  Transform2D(fn.c_str(), nThreads); // Perform the transform.\n  // At this point all thread have completed\n}\n\n\n\n",
+			"file": "threadDFT2d.cc",
+			"file_size": 4169,
+			"file_write_time": 130874630494062571,
+			"settings":
+			{
+				"buffer_size": 4168,
+				"line_ending": "Unix"
+			}
+		}
 	],
 	"build_system": "Packages/Makefile/Make.sublime-build",
 	"build_system_choices":
@@ -321,6 +332,8 @@
 	],
 	"file_history":
 	[
+		"/home/jonathan/Documents/school/ece-6122/projects/ThreadsTransform2D/Makefile",
+		"/home/jonathan/Documents/school/ece-6122/projects/ThreadsTransform2D/after1d-correct.txt",
 		"/home/jonathan/Desktop/RoboDK/bin/lib64/ld-linux-x86-64.so.2",
 		"/home/jonathan/Desktop/RoboDK/Samples/Example 1 - Pick and place.rdk",
 		"/home/jonathan/Desktop/RoboDK/Samples/robodk.py",
@@ -446,9 +459,7 @@
 		"/home/jonathan/Downloads/MCR_R2015a_glnxa64_installer/install",
 		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/libraries/mbed/targets/hal/TARGET_Silicon_Labs/TARGET_EFM32/pinmap_function.h",
 		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/build/mbed/pinmap.h",
-		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/libraries/mbed/hal/pinmap.h",
-		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/libraries/mbed/targets/hal/TARGET_ARM_SSG/TARGET_MPS2/i2c_api.c",
-		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/docs/COMMITTERS.md"
+		"/home/jonathan/Documents/robocup-software/build/firmware/mbed/mbed_libraries-prefix/src/mbed_libraries/libraries/mbed/hal/pinmap.h"
 	],
 	"find":
 	{
@@ -477,6 +488,7 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"can't",
 			"the sys",
 			");\n",
 			"cs",
@@ -603,8 +615,7 @@
 			"us_ticker_irq_handler",
 			"PinMap_",
 			"PinMap_Timer",
-			"\\}[\\s]+PinMap",
-			"}[\\s]+PinMap"
+			"\\}[\\s]+PinMap"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -652,8 +663,39 @@
 	"groups":
 	[
 		{
+			"selected": 0,
 			"sheets":
 			[
+				{
+					"buffer": 0,
+					"file": "threadDFT2d.cc",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 4168,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								212,
+								212
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 54.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				}
 			]
 		}
 	],
