@@ -1,7 +1,7 @@
 # Makefile for ECE8893, 2D FFT assignment
 
 CXX      = /usr/bin/g++
-CXXFLAGS = -Wall -g
+CXXFLAGS = -Wall -g -Wno-int-to-pointer-cast -Wno-unused-variable
 .DEFAULT_GOAL := threadDFT2d
 
 threadDFT2d:	threadDFT2d.o Complex.o InputImage.o
