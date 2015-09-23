@@ -62,19 +62,18 @@ void Transform1D(Complex* h, int N)
 
 void* Transform2DThread(void* const arg)
 {
+  // we are passed our thread number
   unsigned long threadID = (unsigned long)arg;
 
-  // This is the thread startign point.  "v" is the thread number
   // Calculate 1d DFT for assigned rows
   // wait for all to complete
   // Calculate 1d DFT for assigned columns
   // Decrement active count and signal main if all complete
 
-  // mutex example
+  // -- mutex example --
   // pthread_mutex_lock(&elementCountMutex);
   // elementCount += localCount;
   // pthread_mutex_unlock(&elementCountMutex);
-
 
   pthread_mutex_lock(&startCountMutex);
   startCount--;
@@ -124,6 +123,8 @@ void Transform2D(const char* inputFN, int nThreads)
 
   // Main program now waits until all child threads completed
   pthread_cond_wait(&exitCond, &exitMutex);
+
+  cout << "Done!" << endl;
 
   // Write the transformed data
 
