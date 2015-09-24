@@ -56,6 +56,11 @@ bool Complex::operator< (double mag) const
   return get_mag() < mag;
 }
 
+bool Complex::operator== (const Complex& b) const
+{
+  return (real == b.real) && (imag == b.imag);
+}
+
 // Member functions
 double Complex::get_mag() const
 {

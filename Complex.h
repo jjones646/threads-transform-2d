@@ -16,6 +16,7 @@ public:
   Complex operator* (const Complex& b) const;
   bool    operator< (const Complex& b) const;
   bool    operator< (double mag)       const;
+  bool    operator==(const Complex& b) const;
   // Required member functions
   Complex Mag()   const; //Returns the magnitude of the complex number
   Complex Angle() const; //returns the angle of the complex number
