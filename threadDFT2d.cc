@@ -259,6 +259,7 @@ void Transform2D(const char* filename, size_t nThreads)
   // Reset the start count
   startCount = nThreads;
 
+  // =====  START OF INVERSE =====
 
   // enter the barrier so it will be released for the threads to begin the ifft
   barrier_begin_inv->enter(nThreads);
