@@ -6,7 +6,8 @@
 #include <cstdlib>
 #include <iomanip>
 #include <valarray>
-#include <cstring>
+#include <vector>
+#include <numeric>
 #include <math.h>
 #include <sys/time.h>
 #include <pthread.h>
@@ -15,9 +16,7 @@
 #include "InputImage.h"
 #include "myBarrier.h"
 
-
 using namespace std;
-
 
 // the names of the output files
 const std::string outfile_2d          = "Tower-DFT2D.txt";
@@ -30,25 +29,23 @@ const std::string DEFAULT_IN_FILENAME = "Tower.txt";
 const size_t DEFAULT_NUM_THREADS      = 16;
 const bool VERIFY_VALUES              = false;
 
-
 // Global variables visible to all threads
 pthread_mutex_t   start_cnt_M   = PTHREAD_MUTEX_INITIALIZER,
                   exit_M        = PTHREAD_MUTEX_INITIALIZER,
                   elem_cnt_M    = PTHREAD_MUTEX_INITIALIZER,
                   dim_M         = PTHREAD_MUTEX_INITIALIZER,
-                  col_M         = PTHREAD_MUTEX_INITIALIZER,
-                  row_per_M     = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t    exit_C        = PTHREAD_COND_INITIALIZER,
-                  col_C         = PTHREAD_COND_INITIALIZER;
-
+                  row_per_M     = PTHREAD_MUTEX_INITIALIZER,
+                  run_tm_M      = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t    exit_C        = PTHREAD_COND_INITIALIZER;
 Complex*          ImageData;
 Complex*          Weights;
 myBarrier*        barrier;
 myBarrier*        barrier_begin_inv;
-
-int               start_cnt;
-size_t            N,
+size_t            start_cnt,
+                  N,
                   rows_per_thread;
+// vector that holds all thread's final runtime
+std::vector<int>  runtimes;
 
 
 // Verify two Complex arrays against each other - returns the percent different
@@ -96,7 +93,6 @@ int get_clk_ms(void)
   return (tv.tv_sec - startSec) * 1000 + tv.tv_usec / 1000;
 }
 
-
 // Recursively take the fft using the Cooley–Tukey algorithm
 void fft(std::valarray<Complex>& h)
 {
@@ -126,7 +122,6 @@ void fft(std::valarray<Complex>& h)
     h[n + sz / 2]   = h_e[n] - W * h_o[n];
   }
 }
-
 
 // Wrapper function for taking the fft of a given
 // number of values & length
@@ -232,12 +227,16 @@ void* Transform2DThread(void* const arg)
     Transform1D( &ImageData[thread_start_loc * NN + row_offset], NN, true );
   }
 
+  // save how long this thread took to compute everything
+  pthread_mutex_lock(&run_tm_M);
+  runtimes.push_back(get_clk_ms());
+  pthread_mutex_unlock(&run_tm_M);
+
   // Don't exit until we know all of the computations are complete from other threads
   barrier->enter(threadID);
 
   return 0;
 }
-
 
 void Transform2D(const char* filename, size_t nThreads, bool check_results = false)
 {
@@ -355,11 +354,19 @@ void Transform2D(const char* filename, size_t nThreads, bool check_results = fal
     delete[] testbench2_data;
   }
 
-  // Show how long it took to run everything
-  clog << "--  runtime:\t" << std::fixed << std::setprecision(3)
-       << get_clk_ms() / 1000.0 << " s" << endl;
-}
+  std::vector<int>::iterator min_time = std::min_element(runtimes.begin(), runtimes.end());
+  std::vector<int>::iterator max_time = std::max_element(runtimes.begin(), runtimes.end());
+  int avg_time = std::accumulate(runtimes.begin(), runtimes.end(), 0) / runtimes.size();
 
+  // Show how long it took to run everything
+  clog << "===== RUNTIME REPORT =====\t" << std::fixed << std::setprecision(4) << endl
+       << "  Min:  \t" << (*min_time) / 1000.0 << "s" << endl
+       << "  Avg:  \t" << avg_time / 1000.0 << "s" << endl
+       << "  Max:  \t" << (*max_time) / 1000.0 << "s" << endl
+       << "  Total:\t" << get_clk_ms() / 1000.0 << "s" << endl
+       << "  Threads:\t" << nThreads << endl
+       << "==========================\t" << endl;
+}
 
 int main(int argc, char** argv)
 {
@@ -377,7 +384,8 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-  Transform2D(fn.c_str(), nThreads, VERIFY_VALUES); // Perform the transform.
+  // Perform the transform
+  Transform2D(fn.c_str(), nThreads, VERIFY_VALUES);
 }
 
 
