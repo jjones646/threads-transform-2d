@@ -20,6 +20,7 @@ using namespace std;
 const std::string outfile_2d          = "Tower-DFT2D.txt";
 const std::string outfile_2d_inv      = "MyAfterInverse.txt";
 const std::string outfile_2d_inv_alt  = "TowerInverse.txt";
+const size_t DEFAULT_NUM_THREADS      = 16;
 
 // Global variables visible to all threads
 pthread_mutex_t   start_cnt_M   = PTHREAD_MUTEX_INITIALIZER,
@@ -324,13 +325,16 @@ void Transform2D(const char* filename, size_t nThreads)
 int main(int argc, char** argv)
 {
   string fn("Tower.txt"); // default file name
-  size_t nThreads = 16;  // default to 16 threads
+  size_t nThreads = DEFAULT_NUM_THREADS;   // default to 16 threads
 
-  if (argc > 1) nThreads = atoi(argv[1]);   // number of threads to run is the 2nd cmd line opt
-  if (argc > 2) fn = string(argv[2]);  // if name specified on cmd line
+  // if name specified on cmd line
+  if (argc > 1) fn        = string(argv[1]);
+
+  // number of threads to run is the 2nd cmd line opt
+  if (argc > 2) nThreads  = atoi  (argv[2]);
 
   // die if the void cast will be a different size of memory
-  if (sizeof(void*) != sizeof(unsigned long)) {
+  if ( sizeof(void*) != sizeof(size_t) ) {
     exit(EXIT_FAILURE);
   }
 
