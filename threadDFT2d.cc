@@ -29,8 +29,8 @@ pthread_mutex_t   start_cnt_M   = PTHREAD_MUTEX_INITIALIZER,
                   dim_M         = PTHREAD_MUTEX_INITIALIZER,
                   col_M         = PTHREAD_MUTEX_INITIALIZER,
                   row_per_M     = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t    exit_C,
-                  col_C;
+pthread_cond_t    exit_C        = PTHREAD_COND_INITIALIZER,
+                  col_C         = PTHREAD_COND_INITIALIZER;
 
 Complex*          ImageData;
 Complex*          Weights;
@@ -91,8 +91,8 @@ void fft(std::valarray<Complex>& h)
   fft(h_e); fft(h_o);
 
   for (size_t n = 0; n < (sz / 2); ++n) {
-    Complex W = Complex( cos(2 * M_PI * n / sz), -1 * sin(2 * M_PI * n / sz) );
-    // Complex W = Weights[n * (NN / sz)];
+    // Complex W = Complex( cos(2 * M_PI * n / sz), -1 * sin(2 * M_PI * n / sz) );
+    Complex W = Weights[n * (NN / sz)];
 
     h[n]            = h_e[n] + W * h_o[n];
     h[n + sz / 2]   = h_e[n] - W * h_o[n];
@@ -107,29 +107,28 @@ void Transform1D(Complex * h, const size_t sz, bool inverse = false)
   // Construct a std::valarray of the numbers we will compute the fft with
   std::valarray<Complex> h_vals = std::valarray<Complex>(h, sz);
 
+  // Take the conjugate if we're taking the inverse
   if (inverse) {
-    for (size_t i = 0; i < sz; ++i) {
+    for (size_t i = 0; i < sz; ++i)
       h_vals[i] = h_vals[i].Conj();
-    }
   }
 
   // Take the fft!
   fft(h_vals);
 
+  // Now we copy the computed values into their correct locations
+  // and fixup the values if we're taking the IFFT
   if (inverse) {
-    for (size_t i = 0; i < sz; ++i) {
-      //h_vals[i] = h_vals[i].Conj();
+    for (size_t i = 0; i < sz; ++i)
       h[i] = h_vals[i].Conj() * (1.0 / sz);
-    }
   }
   else {
-    // Now we copy the computed values into their correct locationmns
     for (size_t i = 0; i < sz; ++i)
       h[i] = h_vals[i];
   }
 }
 
-
+// Each thread's operation function
 void* Transform2DThread(void* const arg)
 {
   // we are passed our thread number
@@ -169,6 +168,7 @@ void* Transform2DThread(void* const arg)
   // determine if all other threads are complete so we can signal to main
   pthread_mutex_lock(&start_cnt_M);
   start_cnt--;
+
   if (start_cnt <= 0) {
     // Last to finish our calculations, notify main
     pthread_mutex_lock(&exit_M);
@@ -241,14 +241,6 @@ void Transform2D(const char* filename, size_t nThreads)
     cerr << "Image dimensions not power of 2 (" << ImageHeight << " != " << ImageWidth << "). Quitting" << endl;
     exit(EXIT_FAILURE);
   }
-
-  // All mutex/condition variables must be "initialized"
-  // pthread_mutex_init(&exit_M, 0);
-  // pthread_mutex_init(&start_cnt_M, 0);
-  // pthread_mutex_init(&elem_cnt_M, 0);
-  // pthread_mutex_init(&dim_M, 0);
-  // pthread_mutex_init(&row_per_M, 0);
-  pthread_cond_init(&exit_C, 0);
 
   // Assign the barrier object pointer
   barrier = new myBarrier(nThreads + 1);
