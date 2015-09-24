@@ -29,6 +29,7 @@ pthread_mutex_t   startCountMutex,  exitMutex,    elementCountMutex,
                   NMutex,           colMutex,     row_per_threadMutex;
 pthread_cond_t    exitCond,         colCond;
 Complex*          ImageData;
+Complex*          Weights;
 myBarrier*        barrier;
 myBarrier*        barrier_begin_inv;
 int               startCount;
@@ -36,7 +37,7 @@ unsigned int      N,                rows_per_thread;
 
 
 // Takes the transpose of a matrix from the given width and height
-void transpose(Complex* m, size_t w, size_t h) {
+void transpose(Complex* m, const size_t w, const size_t h) {
   for (size_t i = 0; i < h; ++i)
     for (size_t j = i + 1; j < w; ++j)
       std::swap(m[j * w + i], m[i * w + j]);
@@ -80,6 +81,7 @@ void fft(std::valarray<Complex>& h, bool inverse = false)
 
   for (size_t n = 0; n < (sz / 2); ++n) {
     Complex W = Complex( cos(2 * M_PI * n / sz), (inverse ? -1 : 1) * sin(2 * M_PI * n / sz) );
+    // Complex W = Weights[n * (NN / sz)];
 
     h[n]            = h_e[n] + W * h_o[n];
     h[n + sz / 2]   = h_e[n] - W * h_o[n];
@@ -224,6 +226,11 @@ void Transform2D(const char* filename, size_t nThreads)
   // Assign the barrier object pointer
   barrier = new myBarrier(nThreads + 1);
   barrier_begin_inv = new myBarrier(nThreads + 1);
+
+  // Precompute the weight values
+  Weights = new Complex[N];
+  for (size_t n = 0; n < N; ++n)
+    Weights[n] = Complex( cos(2 * M_PI * n / N), -1 * sin(2 * M_PI * n / N) );
 
   // Main holds the exit mutex until waiting for exitCond condition
   pthread_mutex_lock(&exitMutex);
