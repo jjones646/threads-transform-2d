@@ -8,7 +8,6 @@
 #include <valarray>
 #include <cstring>
 #include <math.h>
-#include <cmath>
 #include <sys/time.h>
 #include <pthread.h>
 
@@ -16,16 +15,21 @@
 #include "InputImage.h"
 #include "myBarrier.h"
 
+
 using namespace std;
+
 
 // the names of the output files
 const std::string outfile_2d          = "Tower-DFT2D.txt";
 const std::string outfile_2d_inv      = "MyAfterInverse.txt";
 const std::string outfile_2d_inv_alt  = "TowerInverse.txt";
+// testbench values to check the results against
 const std::string correct_2d          = "after2d-correct.txt";
 
 const std::string DEFAULT_IN_FILENAME = "Tower.txt";
 const size_t DEFAULT_NUM_THREADS      = 16;
+const bool VERIFY_VALUES              = false;
+
 
 // Global variables visible to all threads
 pthread_mutex_t   start_cnt_M   = PTHREAD_MUTEX_INITIALIZER,
@@ -45,6 +49,7 @@ myBarrier*        barrier_begin_inv;
 int               start_cnt;
 size_t            N,
                   rows_per_thread;
+
 
 // Verify two Complex arrays against each other - returns the percent different
 double verify(const Complex* correct_vals, const Complex* check_vals, const size_t sz)
@@ -114,7 +119,7 @@ void fft(std::valarray<Complex>& h)
   fft(h_e); fft(h_o);
 
   for (size_t n = 0; n < (sz / 2); ++n) {
-    // Complex W = Complex( cos(2 * M_PI * n / sz), -1 * sin(2 * M_PI * n / sz) );
+    // lookup what weight we are using
     Complex W = Weights[n * (NN / sz)];
 
     h[n]            = h_e[n] + W * h_o[n];
@@ -208,7 +213,6 @@ void* Transform2DThread(void* const arg)
   }
   pthread_mutex_unlock(&start_cnt_M);
 
-
   // wait until main barriers after saving the 2d transform before we take the inverse
   barrier_begin_inv->enter(threadID);
 
@@ -228,24 +232,14 @@ void* Transform2DThread(void* const arg)
     Transform1D( &ImageData[thread_start_loc * NN + row_offset], NN, true );
   }
 
-  // determine if all other threads are complete so we can signal to main
-  // pthread_mutex_lock(&start_cnt_M);
-  // start_cnt--;
-  // if (start_cnt <= 0) {
-  //   // Last to exit, notify main
-  //   pthread_mutex_lock(&exit_M);
-  //   pthread_cond_signal(&exit_C);
-  //   pthread_mutex_unlock(&exit_M);
-  // }
-  // pthread_mutex_unlock(&start_cnt_M);
-
+  // Don't exit until we know all of the computations are complete from other threads
   barrier->enter(threadID);
 
   return 0;
 }
 
 
-void Transform2D(const char* filename, size_t nThreads)
+void Transform2D(const char* filename, size_t nThreads, bool check_results = false)
 {
   // Create the helper object for reading the image
   InputImage image(filename);
@@ -313,21 +307,17 @@ void Transform2D(const char* filename, size_t nThreads)
   // Write the transformed data
   image.SaveImageData(outfile_2d.c_str(), ImageData, ImageWidth, ImageHeight);
 
-  // Check the results against the testbench values
-  InputImage  testbench(correct_2d.c_str());
-  Complex*    testbench_data  = testbench.GetImageData();
-  size_t      testbench_N     = testbench.GetWidth();
-  double perc_diff = verify(ImageData, testbench_data, testbench_N * testbench_N);
-  clog << "--  FFT 2D results:\t" << ((perc_diff == 0.0) ? "PASS" : "FAIL")
-       << "\t(" << std::fixed << std::setprecision(12) << ((1.0 - perc_diff) * 100.0) << "% similar)" << endl;
-
-  delete[] testbench_data;
-
-  // Transpose again so that we're back to the columns
-  //transpose(ImageData, ImageWidth, ImageHeight);
-
-  // Reset the start count
-  start_cnt = nThreads;
+  if (check_results == true) {
+    // Check the results against the testbench values
+    InputImage  testbench(correct_2d.c_str());
+    Complex*    testbench_data  = testbench.GetImageData();
+    size_t      testbench_N     = testbench.GetWidth();
+    double perc_diff = verify(ImageData, testbench_data, testbench_N * testbench_N);
+    cout << "--  FFT 2D results:\t" << ((perc_diff == 0.0) ? "PASS" : "FAIL")
+         << "\t(" << std::fixed << std::setprecision(6) << ((1.0 - perc_diff) * 100.0) << "% similar)" << endl;
+    // cleanup since we do the inverse now
+    delete[] testbench_data;
+  }
 
   // =====  START OF INVERSE =====
 
@@ -337,29 +327,33 @@ void Transform2D(const char* filename, size_t nThreads)
   // now we enter back immediately so that we wait for the 1d inverse transpose to finish
   barrier->enter(nThreads);
 
+  // flip the columns into the rows
   transpose(ImageData, ImageWidth, ImageHeight);
 
+  // enter into the barrier so that the threads will be released
   barrier->enter(nThreads);
 
-  //pthread_cond_wait(&exit_C, &exit_M);
+  // wait for all of the threads to compute the rows
   barrier->enter(nThreads);
 
+  // flip the matrix so we are back to our original placements
   transpose(ImageData, ImageWidth, ImageHeight);
 
-  //rev_vals(ImageData, ImageWidth * ImageHeight);
-
+  // save the results
   image.SaveImageData(outfile_2d_inv.c_str(), ImageData, ImageWidth, ImageHeight);
   image.SaveImageData(outfile_2d_inv_alt.c_str(), ImageData, ImageWidth, ImageHeight);
 
   // Check the results against the testbench values
-  InputImage  testbench2(DEFAULT_IN_FILENAME.c_str());
-  Complex*    testbench2_data  = testbench2.GetImageData();
-  size_t      testbench2_N     = testbench2.GetWidth();
-  double perc_diff2 = verify(ImageData, testbench2_data, testbench2_N * testbench2_N);
-  clog << "--  IFFT 2D results:\t" << ((perc_diff2 == 0.0) ? "PASS" : "FAIL")
-       << "\t(" << std::fixed << std::setprecision(12) << ((1.0 - perc_diff2) * 100.0) << "% similar)" << endl;
-
-  delete[] testbench2_data;
+  if (check_results == true) {
+    InputImage  testbench2(DEFAULT_IN_FILENAME.c_str());
+    Complex*    testbench2_data  = testbench2.GetImageData();
+    size_t      testbench2_N     = testbench2.GetWidth();
+    double perc_diff2 = verify(ImageData, testbench2_data, testbench2_N * testbench2_N);
+    cout << "--  IFFT 2D results:\t" << ((perc_diff2 == 0.0) ? "PASS" : "FAIL")
+         << "\t(" << std::fixed << std::setprecision(6) << ((1.0 - perc_diff2) * 100.0) << "% similar)" << endl;
+    // cleanup since we do the inverse now
+    delete[] testbench2_data;
+  }
 
   // Show how long it took to run everything
   clog << "--  runtime:\t" << std::fixed << std::setprecision(3)
@@ -383,9 +377,7 @@ int main(int argc, char** argv)
     exit(EXIT_FAILURE);
   }
 
-  Transform2D(fn.c_str(), nThreads); // Perform the transform.
-
-  // At this point all thread have completed & there's nothing left to do
+  Transform2D(fn.c_str(), nThreads, VERIFY_VALUES); // Perform the transform.
 }
 
 
