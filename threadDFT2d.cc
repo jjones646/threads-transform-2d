@@ -14,26 +14,31 @@
 #include "InputImage.h"
 #include "myBarrier.h"
 
-
 using namespace std;
-
 
 // the names of the output files
 const std::string outfile_2d          = "Tower-DFT2D.txt";
 const std::string outfile_2d_inv      = "MyAfterInverse.txt";
 const std::string outfile_2d_inv_alt  = "TowerInverse.txt";
 
-
 // Global variables visible to all threads
-pthread_mutex_t   startCountMutex,  exitMutex,    elementCountMutex,
-                  NMutex,           colMutex,     row_per_threadMutex;
-pthread_cond_t    exitCond,         colCond;
+pthread_mutex_t   start_cnt_M   = PTHREAD_MUTEX_INITIALIZER,
+                  exit_M        = PTHREAD_MUTEX_INITIALIZER,
+                  elem_cnt_M    = PTHREAD_MUTEX_INITIALIZER,
+                  dim_M         = PTHREAD_MUTEX_INITIALIZER,
+                  col_M         = PTHREAD_MUTEX_INITIALIZER,
+                  row_per_M     = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t    exit_C,
+                  col_C;
+
 Complex*          ImageData;
 Complex*          Weights;
 myBarrier*        barrier;
 myBarrier*        barrier_begin_inv;
-int               startCount;
-unsigned int      N,                rows_per_thread;
+
+int               start_cnt;
+size_t            N,
+                  rows_per_thread;
 
 
 // Takes the transpose of a matrix from the given width and height
@@ -64,13 +69,18 @@ int get_clk_ms(void)
 
 
 // Recursively take the fft using the Cooley–Tukey algorithm
-void fft(std::valarray<Complex>& h, bool inverse = false)
+void fft(std::valarray<Complex>& h)
 {
   // Implement the efficient Danielson-Lanczos DFT here.
   const size_t sz = h.size();
 
   // stop once we are at the base case
   if (sz < 2) return;
+
+  // get the size of the weights array
+  pthread_mutex_lock(&dim_M);
+  const size_t NN = N;
+  pthread_mutex_unlock(&dim_M);
 
   // create temporary valarrays for storing the even & odd values
   std::valarray<Complex> h_e = h[std::slice(0, sz / 2, 2)];
@@ -80,7 +90,7 @@ void fft(std::valarray<Complex>& h, bool inverse = false)
   fft(h_e); fft(h_o);
 
   for (size_t n = 0; n < (sz / 2); ++n) {
-    Complex W = Complex( cos(2 * M_PI * n / sz), (inverse ? -1 : 1) * sin(2 * M_PI * n / sz) );
+    Complex W = Complex( cos(2 * M_PI * n / sz), -1 * sin(2 * M_PI * n / sz) );
     // Complex W = Weights[n * (NN / sz)];
 
     h[n]            = h_e[n] + W * h_o[n];
@@ -96,12 +106,26 @@ void Transform1D(Complex * h, const size_t sz, bool inverse = false)
   // Construct a std::valarray of the numbers we will compute the fft with
   std::valarray<Complex> h_vals = std::valarray<Complex>(h, sz);
 
-  // Take the fft!
-  fft(h_vals, inverse);
+  if (inverse) {
+    for (size_t i = 0; i < sz; ++i) {
+      h_vals[i] = h_vals[i].Conj();
+    }
+  }
 
-  // Now we copy the computed values into their correct locations
-  for (size_t i = 0; i < sz; ++i)
-    h[i] = h_vals[i] * (inverse ? (1.0 / N) : 1);
+  // Take the fft!
+  fft(h_vals);
+
+  if (inverse) {
+    for (size_t i = 0; i < sz; ++i) {
+      //h_vals[i] = h_vals[i].Conj();
+      h[i] = h_vals[i].Conj() * (1.0 / sz);
+    }
+  }
+  else {
+    // Now we copy the computed values into their correct locationmns
+    for (size_t i = 0; i < sz; ++i)
+      h[i] = h_vals[i];
+  }
 }
 
 
@@ -111,14 +135,14 @@ void* Transform2DThread(void* const arg)
   const unsigned long threadID = (unsigned long)arg;
 
   // find out the dimension so we can find our starting location
-  pthread_mutex_lock(&NMutex);
+  pthread_mutex_lock(&dim_M);
   const size_t NN = N;
-  pthread_mutex_unlock(&NMutex);
+  pthread_mutex_unlock(&dim_M);
 
   // set how many threads we are working with
-  pthread_mutex_lock(&row_per_threadMutex);
+  pthread_mutex_lock(&row_per_M);
   const size_t thread_num_rows = rows_per_thread;
-  pthread_mutex_unlock(&row_per_threadMutex);
+  pthread_mutex_unlock(&row_per_M);
 
   // now we can find our starting location with the new info
   const size_t thread_start_loc = thread_num_rows * threadID;
@@ -142,15 +166,15 @@ void* Transform2DThread(void* const arg)
   }
 
   // determine if all other threads are complete so we can signal to main
-  pthread_mutex_lock(&startCountMutex);
-  startCount--;
-  if (startCount <= 0) {
+  pthread_mutex_lock(&start_cnt_M);
+  start_cnt--;
+  if (start_cnt <= 0) {
     // Last to finish our calculations, notify main
-    pthread_mutex_lock(&exitMutex);
-    pthread_cond_signal(&exitCond);
-    pthread_mutex_unlock(&exitMutex);
+    pthread_mutex_lock(&exit_M);
+    pthread_cond_signal(&exit_C);
+    pthread_mutex_unlock(&exit_M);
   }
-  pthread_mutex_unlock(&startCountMutex);
+  pthread_mutex_unlock(&start_cnt_M);
 
 
   // wait until main barriers after saving the 2d transform before we take the inverse
@@ -173,15 +197,17 @@ void* Transform2DThread(void* const arg)
   }
 
   // determine if all other threads are complete so we can signal to main
-  pthread_mutex_lock(&startCountMutex);
-  startCount--;
-  if (startCount <= 0) {
-    // Last to exit, notify main
-    pthread_mutex_lock(&exitMutex);
-    pthread_cond_signal(&exitCond);
-    pthread_mutex_unlock(&exitMutex);
-  }
-  pthread_mutex_unlock(&startCountMutex);
+  // pthread_mutex_lock(&start_cnt_M);
+  // start_cnt--;
+  // if (start_cnt <= 0) {
+  //   // Last to exit, notify main
+  //   pthread_mutex_lock(&exit_M);
+  //   pthread_cond_signal(&exit_C);
+  //   pthread_mutex_unlock(&exit_M);
+  // }
+  // pthread_mutex_unlock(&start_cnt_M);
+
+  barrier->enter(threadID);
 
   return 0;
 }
@@ -191,7 +217,7 @@ void Transform2D(const char* filename, size_t nThreads)
 {
   // Create the helper object for reading the image
   InputImage image(filename);
-  startCount = nThreads;
+  start_cnt = nThreads;
 
   // Store image data array as well as width/height
   ImageData       = image.GetImageData();
@@ -216,12 +242,12 @@ void Transform2D(const char* filename, size_t nThreads)
   }
 
   // All mutex/condition variables must be "initialized"
-  pthread_mutex_init(&exitMutex, 0);
-  pthread_mutex_init(&startCountMutex, 0);
-  pthread_mutex_init(&elementCountMutex, 0);
-  pthread_mutex_init(&NMutex, 0);
-  pthread_mutex_init(&row_per_threadMutex, 0);
-  pthread_cond_init(&exitCond, 0);
+  // pthread_mutex_init(&exit_M, 0);
+  // pthread_mutex_init(&start_cnt_M, 0);
+  // pthread_mutex_init(&elem_cnt_M, 0);
+  // pthread_mutex_init(&dim_M, 0);
+  // pthread_mutex_init(&row_per_M, 0);
+  pthread_cond_init(&exit_C, 0);
 
   // Assign the barrier object pointer
   barrier = new myBarrier(nThreads + 1);
@@ -232,8 +258,8 @@ void Transform2D(const char* filename, size_t nThreads)
   for (size_t n = 0; n < N; ++n)
     Weights[n] = Complex( cos(2 * M_PI * n / N), -1 * sin(2 * M_PI * n / N) );
 
-  // Main holds the exit mutex until waiting for exitCond condition
-  pthread_mutex_lock(&exitMutex);
+  // Main holds the exit mutex until waiting for exit_C condition
+  pthread_mutex_lock(&exit_M);
 
   // Get elapsed milliseconds (starting time after image loaded)
   get_clk_ms();
@@ -255,7 +281,7 @@ void Transform2D(const char* filename, size_t nThreads)
   barrier->enter(nThreads);
 
   // wait for the signal condition that the last thread is finished
-  pthread_cond_wait(&exitCond, &exitMutex);
+  pthread_cond_wait(&exit_C, &exit_M);
 
   // take the transpose to complete the 2d transform
   transpose(ImageData, ImageWidth, ImageHeight);
@@ -263,8 +289,10 @@ void Transform2D(const char* filename, size_t nThreads)
   // Write the transformed data
   image.SaveImageData(outfile_2d.c_str(), ImageData, ImageWidth, ImageHeight);
 
+  transpose(ImageData, ImageWidth, ImageHeight);
+
   // Reset the start count
-  startCount = nThreads;
+  start_cnt = nThreads;
 
   // =====  START OF INVERSE =====
 
@@ -278,9 +306,12 @@ void Transform2D(const char* filename, size_t nThreads)
 
   barrier->enter(nThreads);
 
-  pthread_cond_wait(&exitCond, &exitMutex);
+  //pthread_cond_wait(&exit_C, &exit_M);
+  barrier->enter(nThreads);
 
-  transpose(ImageData, ImageWidth, ImageHeight);
+  //transpose(ImageData, ImageWidth, ImageHeight);
+
+  std::reverse(ImageData, &ImageData[ImageWidth * ImageHeight - 1]);
 
   image.SaveImageData(outfile_2d_inv.c_str(), ImageData, ImageWidth, ImageHeight);
   image.SaveImageData(outfile_2d_inv_alt.c_str(), ImageData, ImageWidth, ImageHeight);
