@@ -169,7 +169,7 @@ void* Transform2DThread(void* const arg)
   // back to the original rows
   for (size_t row = 0; row < thread_num_rows; ++row) {
     const size_t row_offset = row * NN;
-    Transform1D( &ImageData[thread_start_loc * NN + row_offset], NN );
+    Transform1D( &ImageData[thread_start_loc * NN + row_offset], NN, true );
   }
 
   // determine if all other threads are complete so we can signal to main
