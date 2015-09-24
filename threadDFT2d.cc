@@ -4,9 +4,11 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <iomanip>
 #include <valarray>
 #include <cstring>
 #include <math.h>
+#include <cmath>
 #include <sys/time.h>
 #include <pthread.h>
 
@@ -20,6 +22,9 @@ using namespace std;
 const std::string outfile_2d          = "Tower-DFT2D.txt";
 const std::string outfile_2d_inv      = "MyAfterInverse.txt";
 const std::string outfile_2d_inv_alt  = "TowerInverse.txt";
+const std::string correct_2d          = "after2d-correct.txt";
+
+const std::string DEFAULT_IN_FILENAME = "Tower.txt";
 const size_t DEFAULT_NUM_THREADS      = 16;
 
 // Global variables visible to all threads
@@ -41,6 +46,25 @@ int               start_cnt;
 size_t            N,
                   rows_per_thread;
 
+// Verify two Complex arrays against each other - returns the percent different
+double verify(const Complex* correct_vals, const Complex* check_vals, const size_t sz)
+{
+  double err_t = 0.0;
+  std::valarray<double> err(sz);
+
+  for (size_t i = 0; i < sz; ++i)
+    err[i] = std::abs(correct_vals[i].get_mag() - check_vals[i].get_mag()) / correct_vals[i].get_mag();
+
+  err_t = err.sum() / static_cast<double>(sz);
+
+  if (err_t < 1.0e-10)
+    err_t = 0.0;
+
+  if ( (err.max() < 1.0e-4) && (isnormal(err_t)) )
+    err_t = 0.0;
+
+  return (isnormal(err_t) ? err_t : 0.0);
+}
 
 // Takes the transpose of a matrix from the given width and height
 void transpose(Complex* m, const size_t w, const size_t h) {
@@ -48,7 +72,6 @@ void transpose(Complex* m, const size_t w, const size_t h) {
     for (size_t j = i + 1; j < w; ++j)
       std::swap(m[j * w + i], m[i * w + j]);
 }
-
 
 // Millisecond clock function
 int get_clk_ms(void)
@@ -119,12 +142,20 @@ void Transform1D(Complex * h, const size_t sz, bool inverse = false)
   // Now we copy the computed values into their correct locations
   // and fixup the values if we're taking the IFFT
   if (inverse) {
-    for (size_t i = 0; i < sz; ++i)
+    for (size_t i = 0; i < sz; ++i) {
       h[i] = h_vals[i].Conj() * (1.0 / sz);
+
+      if (h_vals[i] < 1.0e-10)
+        h[i] = Complex(0);
+    }
   }
   else {
-    for (size_t i = 0; i < sz; ++i)
+    for (size_t i = 0; i < sz; ++i) {
       h[i] = h_vals[i];
+
+      if (h_vals[i] < 1.0e-10)
+        h[i] = Complex(0);
+    }
   }
 }
 
@@ -221,9 +252,9 @@ void Transform2D(const char* filename, size_t nThreads)
   start_cnt = nThreads;
 
   // Store image data array as well as width/height
-  ImageData       = image.GetImageData();
-  int ImageWidth  = image.GetWidth();
-  int ImageHeight = image.GetHeight();
+  ImageData           = image.GetImageData();
+  size_t ImageWidth   = image.GetWidth();
+  size_t ImageHeight  = image.GetHeight();
 
   // set the global variable for number of rows/thread
   rows_per_thread = ImageWidth / nThreads;
@@ -282,7 +313,18 @@ void Transform2D(const char* filename, size_t nThreads)
   // Write the transformed data
   image.SaveImageData(outfile_2d.c_str(), ImageData, ImageWidth, ImageHeight);
 
-  transpose(ImageData, ImageWidth, ImageHeight);
+  // Check the results against the testbench values
+  InputImage  testbench(correct_2d.c_str());
+  Complex*    testbench_data  = testbench.GetImageData();
+  size_t      testbench_N     = testbench.GetWidth();
+  double perc_diff = verify(ImageData, testbench_data, testbench_N * testbench_N);
+  clog << "--  FFT 2D results:\t" << ((perc_diff == 0.0) ? "PASS" : "FAIL")
+       << "\t(" << std::fixed << std::setprecision(12) << ((1.0 - perc_diff) * 100.0) << "% similar)" << endl;
+
+  delete[] testbench_data;
+
+  // Transpose again so that we're back to the columns
+  //transpose(ImageData, ImageWidth, ImageHeight);
 
   // Reset the start count
   start_cnt = nThreads;
@@ -302,21 +344,32 @@ void Transform2D(const char* filename, size_t nThreads)
   //pthread_cond_wait(&exit_C, &exit_M);
   barrier->enter(nThreads);
 
-  //transpose(ImageData, ImageWidth, ImageHeight);
+  transpose(ImageData, ImageWidth, ImageHeight);
 
-  std::reverse(ImageData, &ImageData[ImageWidth * ImageHeight - 1]);
+  //rev_vals(ImageData, ImageWidth * ImageHeight);
 
   image.SaveImageData(outfile_2d_inv.c_str(), ImageData, ImageWidth, ImageHeight);
   image.SaveImageData(outfile_2d_inv_alt.c_str(), ImageData, ImageWidth, ImageHeight);
 
+  // Check the results against the testbench values
+  InputImage  testbench2(DEFAULT_IN_FILENAME.c_str());
+  Complex*    testbench2_data  = testbench2.GetImageData();
+  size_t      testbench2_N     = testbench2.GetWidth();
+  double perc_diff2 = verify(ImageData, testbench2_data, testbench2_N * testbench2_N);
+  clog << "--  IFFT 2D results:\t" << ((perc_diff2 == 0.0) ? "PASS" : "FAIL")
+       << "\t(" << std::fixed << std::setprecision(12) << ((1.0 - perc_diff2) * 100.0) << "% similar)" << endl;
+
+  delete[] testbench2_data;
+
   // Show how long it took to run everything
-  clog << "--  runtime:\t" << get_clk_ms() / 1000.0 << " s" << endl;
+  clog << "--  runtime:\t" << std::fixed << std::setprecision(3)
+       << get_clk_ms() / 1000.0 << " s" << endl;
 }
 
 
 int main(int argc, char** argv)
 {
-  string fn("Tower.txt"); // default file name
+  string fn(DEFAULT_IN_FILENAME); // default file name
   size_t nThreads = DEFAULT_NUM_THREADS;   // default to 16 threads
 
   // if name specified on cmd line

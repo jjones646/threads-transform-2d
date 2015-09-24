@@ -22,14 +22,13 @@ public:
   Complex Angle() const; //returns the angle of the complex number
   Complex Conj()  const; //returns the complex conjugate of the Complex number
   void    Print() const; // Print the complex value
+  double  get_mag() const;
   // Data Members
 private:
   double real;
   double imag;
 
   friend std::ostream& operator<< (std::ostream &os, const Complex& c);
-
-  double get_mag() const;
 };
 
 // Global function to output a Complex value
