@@ -1,4 +1,4 @@
-# Makefile for ECE6122, 2D FFT assignment
+# Makefile for 2D FFT assignment
 
 CXX      = /usr/bin/g++
 CXXFLAGS = -Wall -g
@@ -9,4 +9,3 @@ threadDFT2d:	threadDFT2d.o Complex.o InputImage.o myBarrier.o
 
 clean:
 	@rm *.o threadDFT2d
-

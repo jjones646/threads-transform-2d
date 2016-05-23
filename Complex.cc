@@ -1,8 +1,8 @@
-//
-// ECE3090 Program 3 - Complex Number Class implementation
-// Jonathan Jones
-// PLATFORM (Windows or Linux)
-//
+/*
+ * ECE3090 Program 3 - Complex Number Class implementation
+ * Jonathan Jones
+ * PLATFORM (Windows or Linux)
+ */
 
 #include <iostream>
 #include <string>

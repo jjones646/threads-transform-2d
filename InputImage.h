@@ -1,3 +1,5 @@
+#pragma once
+
 // Manage a text file with a black-white image
 // George F. Riley, Georgia Tech, Fall 2009
 

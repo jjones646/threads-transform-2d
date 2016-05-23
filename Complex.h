@@ -1,3 +1,5 @@
+#pragma once
+
 // Class declaration for Complex number class
 // Should be no need for students to change this code.
 
@@ -33,10 +35,3 @@ private:
 
 // Global function to output a Complex value
 std::ostream& operator << (std::ostream &os, const Complex& c);
-
-
-
-
-
-
-

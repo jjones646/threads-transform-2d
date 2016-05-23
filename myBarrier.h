@@ -1,10 +1,10 @@
+#pragma once
+
 // Implement a "good" barrier. This is called the "sense reversing" barrier
 
 #include "pthread.h"
 
-
 class myBarrier {
-
 public:
 	myBarrier(int P0); // P is the total number of threads
 	void enter(int myId); // Enter the barrier, don’t exit till alll there
