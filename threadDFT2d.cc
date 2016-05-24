@@ -373,6 +373,11 @@ int main(int argc, char** argv)
   string fn(DEFAULT_IN_FILENAME); // default file name
   size_t nThreads = DEFAULT_NUM_THREADS;   // default to 16 threads
 
+  if (argc < 1) {
+    clog << "Usage: " << argv[0] << " <input-matrix> [num-threads]" << endl;
+    exit(EXIT_FAILURE);
+  }
+
   // if name specified on cmd line
   if (argc > 1) fn        = string(argv[1]);
 
