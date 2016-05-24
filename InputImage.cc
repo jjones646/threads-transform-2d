@@ -53,7 +53,7 @@ void InputImage::SaveImageData(const char* newFileName, Complex* d,
   ofstream ofs(newFileName);
   if (!ofs)
   {
-    cout << "Can't create output image " << newFileName << endl;
+    cerr << "Can't create output image " << newFileName << endl;
     return;
   }
   ofs << w << " " << h << endl;
@@ -66,8 +66,3 @@ void InputImage::SaveImageData(const char* newFileName, Complex* d,
     ofs << endl;
   }
 }
-
-
-
-
-

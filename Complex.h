@@ -1,7 +1,8 @@
 #pragma once
 
-// Class declaration for Complex number class
-// Should be no need for students to change this code.
+/*
+ * Class declaration for Complex number class
+ */
 
 #include <iostream>
 #include <string>

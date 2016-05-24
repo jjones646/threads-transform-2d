@@ -1,6 +1,8 @@
 #pragma once
 
-// Implement a "good" barrier. This is called the "sense reversing" barrier
+/*
+ * Class declaration for a barrier class
+ */
 
 #include "pthread.h"
 

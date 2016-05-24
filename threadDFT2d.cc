@@ -1,6 +1,7 @@
-// Threaded two-dimensional Discrete FFT transform
-// Jonathan Jones
-// ECE8893 Project 2
+/*
+ * Threaded two-dimensional Discrete FFT transform
+ * Jonathan Jones
+ */ 
 
 #include <iostream>
 #include <cstdlib>
@@ -392,6 +393,3 @@ int main(int argc, char** argv)
   // Perform the transform
   Transform2D(fn.c_str(), nThreads, VERIFY_VALUES);
 }
-
-
-

@@ -1,6 +1,6 @@
-// This illustrates how a barrier would be implemented (both a "buggy" version
-// and a good one).
-// George F. Riley, Georgia Tech, Fall 2010
+/*
+ * This is how a barrier is implemented
+ */
 
 #include "myBarrier.h"
 
