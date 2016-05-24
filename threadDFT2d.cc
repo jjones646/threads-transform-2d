@@ -20,8 +20,7 @@ using namespace std;
 
 // the names of the output files
 const std::string outfile_2d          = "Tower-DFT2D.txt";
-const std::string outfile_2d_inv      = "MyAfterInverse.txt";
-const std::string outfile_2d_inv_alt  = "TowerInverse.txt";
+const std::string outfile_2d_inv      = "Tower-IDFT2D.txt";
 // testbench values to check the results against
 const std::string correct_2d          = "after2d-correct.txt";
 
@@ -305,6 +304,7 @@ void Transform2D(const char* filename, size_t nThreads, bool check_results = fal
 
   // Write the transformed data
   image.SaveImageData(outfile_2d.c_str(), ImageData, ImageWidth, ImageHeight);
+  clog << "results written to " << outfile_2d << endl;
 
   if (check_results == true) {
     // Check the results against the testbench values
@@ -340,7 +340,7 @@ void Transform2D(const char* filename, size_t nThreads, bool check_results = fal
 
   // save the results
   image.SaveImageData(outfile_2d_inv.c_str(), ImageData, ImageWidth, ImageHeight);
-  image.SaveImageData(outfile_2d_inv_alt.c_str(), ImageData, ImageWidth, ImageHeight);
+  clog << "inverse results written to " << outfile_2d_inv << endl;
 
   // Check the results against the testbench values
   if (check_results == true) {
@@ -373,8 +373,8 @@ int main(int argc, char** argv)
   string fn(DEFAULT_IN_FILENAME); // default file name
   size_t nThreads = DEFAULT_NUM_THREADS;   // default to 16 threads
 
-  if (argc < 1) {
-    clog << "Usage: " << argv[0] << " <input-matrix> [num-threads]" << endl;
+  if (argc < 2) {
+    cout << "Usage: " << argv[0] << " <input-matrix> [num-threads]" << endl;
     exit(EXIT_FAILURE);
   }
 
